@@ -1,10 +1,14 @@
+# Fixed project name, so container, network and volume names stay "vulnfixer_*" whatever
+# directory the repo is checked out in (it used to be taken from the folder name).
+name: vulnfixer
+
 services:
-  vuln-fix-agent:
+  vulnfixer:
     build: .
-    image: vuln-fix-agent:latest
-    container_name: vuln-fix-agent
+    image: vulnfixer:latest
+    container_name: vulnfixer
     restart: unless-stopped
-    networks: [vuln-fix-agent-net]
+    networks: [vulnfixer-net]
     # Host-only: reachable from your Mac, not from the LAN.
     ports: ["127.0.0.1:9999:9999"]
     environment:
@@ -72,5 +76,5 @@ volumes:
   ssh-keys:
 
 networks:
-  vuln-fix-agent-net:
-    name: vuln-fix-agent-net
+  vulnfixer-net:
+    name: vulnfixer-net

@@ -14,4 +14,4 @@
 SHELL=/bin/bash
 PATH=/usr/local/bin:/usr/bin:/bin
 MAILTO=""
-0 3 * * 1-5 cd /opt/vuln-fix-agent && ./scripts/VulnFixAgent >> /opt/vuln-fix-agent/vuln-run.log 2>&1
+0 3 * * 1-5 cd /opt/vulnfixer && ./scripts/VulnFixAgent >> /opt/vulnfixer/vuln-run.log 2>&1

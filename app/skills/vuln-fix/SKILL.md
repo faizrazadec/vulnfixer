@@ -253,7 +253,7 @@ create (non-zero exit) is a failure to report, never something to paper over.
    resource-discipline note above.
 
    **Tag and run so the artifacts are cleanable (step 9 depends on this).** Tag EVERY image
-   you build under the `vuln-fix-agent-verify/<project>` namespace — e.g. `vuln-fix-agent-verify/<project>:base`
+   you build under the `vulnfixer-verify/<project>` namespace — e.g. `vulnfixer-verify/<project>:base`
    and `:fixed` — never a bare `<project>:baseline`, so cleanup can find them and only them,
    without touching unrelated images on the shared daemon. If you run the image to execute
    tests, always `docker run --rm ...` so no stopped container is left behind. The daemon is
@@ -442,20 +442,20 @@ create (non-zero exit) is a failure to report, never something to paper over.
      make clear in both which is which.
 
 9. **Clean up — say what to KEEP, not what to delete.** The batch runner reaps the
-   workspace and the `vuln-fix-agent-verify/*` image namespace after every project,
+   workspace and the `vulnfixer-verify/*` image namespace after every project,
    unconditionally. You do not have to remember to tidy up, and you must not rely on the
    reaper skipping anything you did not mark.
 
    - **If a fix broke something** (the 8b case) and a human needs to inspect the clone,
      mark it: `touch "<clone-dir>/.vuln-fix-keep"`. The reaper preserves marked clones for
      7 days. Say in your final report and Slack message that you kept it, with its path.
-   - **Every other outcome** — do nothing. The clone and any `vuln-fix-agent-verify/*`
+   - **Every other outcome** — do nothing. The clone and any `vulnfixer-verify/*`
      images you built are removed for you after the run.
    - You may still delete your own clone early if you want the disk back sooner
      (`rm -rf "<dir>"`, or `find "<dir>" -mindepth 0 -delete` if the destructive-command
      guard fires). Never delete anything under `$WORKSPACE` that you did not create.
    - Still `docker run --rm` anything you run, and still tag every image you build under
-     `vuln-fix-agent-verify/<project>` — the reaper finds images by that namespace, so an
+     `vulnfixer-verify/<project>` — the reaper finds images by that namespace, so an
      image tagged outside it survives and accumulates. NEVER `docker system prune`,
      `container prune`, or `image prune -a`: the daemon is shared with other stacks.
 
@@ -512,7 +512,7 @@ create (non-zero exit) is a failure to report, never something to paper over.
   key registered on GitHub. Override it and GitHub marks the signature Unverified, and repos
   that require verified signatures reject the push.
 - Never force-push, never touch the base branch, never merge your own PR.
-- Tag every image you build `vuln-fix-agent-verify/<project>:<something>`, and mark a
+- Tag every image you build `vulnfixer-verify/<project>:<something>`, and mark a
   clone you need preserved with `.vuln-fix-keep`. Anything outside that namespace or
   without that marker is reaped after the run — by design.
 - Never commit a secret, token, or key. If a scan flags one in the repo, Slack it and do

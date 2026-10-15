@@ -1,4 +1,4 @@
-# Changelog — vuln-fix-agent
+# Changelog — vulnfixer
 
 Significant changes to this project are recorded as one Markdown file
 per change.

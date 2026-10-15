@@ -20,8 +20,8 @@ trap "" HUP
 DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$DIR"
 
-LOCK="/tmp/vuln-fix-agent-run-all.lock"
-SVC=vuln-fix-agent
+LOCK="/tmp/vulnfixer-run-all.lock"
+SVC=vulnfixer
 LOG_TS() { date '+%Y-%m-%d %H:%M:%S'; }
 say() { echo "$(LOG_TS) $*"; }
 inside() { docker compose exec -T -u agent "$SVC" "$@"; }
@@ -131,7 +131,7 @@ for d in "$W"/*/; do
 done
 # Images and containers the verification step built. Scoped to the namespace SKILL.md
 # mandates, so nothing else on this shared daemon is touched — never `system prune`.
-imgs=$(docker images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | grep '^vuln-fix-agent-verify/' || true)
+imgs=$(docker images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | grep '^vulnfixer-verify/' || true)
 if [ -n "$imgs" ]; then
   for i in $imgs; do
     docker ps -aq --filter "ancestor=$i" 2>/dev/null | xargs -r docker rm -f >/dev/null 2>&1 || true
