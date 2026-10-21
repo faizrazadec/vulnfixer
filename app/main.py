@@ -60,7 +60,10 @@ PUBLIC_URL = os.environ.get("PUBLIC_URL", "http://localhost:9999")
 WORKSPACE = os.environ.get("WORKSPACE", os.getcwd())
 STATE_DIR = pathlib.Path(os.environ.get("STATE_DIR", "/home/agent/state"))
 TOKEN = os.environ.get("A2A_TOKEN")
-MAX_TURNS = int(os.environ.get("MAX_TURNS", "200"))
+# 200 was too few for a large project: one run spent them on two clones, a slow test
+# suite, several image builds and polling the PR's checks, and stopped before its
+# ticket and Slack steps.
+MAX_TURNS = int(os.environ.get("MAX_TURNS", "400"))
 # The pipeline lives in skills/vuln-fix/SKILL.md, which entrypoint.sh installs into
 # $CLAUDE_CONFIG_DIR/skills. Only a pointer goes in the prompt — a bare string here would
 # send --system-prompt and REPLACE Claude Code's own prompt; preset+append adds to it.
