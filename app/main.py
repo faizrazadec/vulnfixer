@@ -54,7 +54,7 @@ from claude_agent_sdk import (
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
-log = logging.getLogger("vuln-fix-agent")
+log = logging.getLogger("vulnfixer")
 
 PUBLIC_URL = os.environ.get("PUBLIC_URL", "http://localhost:9999")
 WORKSPACE = os.environ.get("WORKSPACE", os.getcwd())
@@ -471,7 +471,7 @@ def _stop_verify_containers() -> list[str]:
         return []
     ids = [
         cid for cid, _, image in (line.partition(" ") for line in out.splitlines())
-        if image.startswith("vuln-fix-agent-verify/")
+        if image.startswith("vulnfixer-verify/")
     ]
     if ids:
         try:

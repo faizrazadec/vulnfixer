@@ -1,4 +1,4 @@
-# vuln-fix-agent
+# vulnfixer
 
 An [A2A (Agent2Agent)](https://a2a-protocol.org) server that exposes Claude Code as a callable
 agent for fixing security vulnerabilities. A caller sends a JSON-RPC `SendMessage` such as
@@ -58,7 +58,7 @@ cp .env.example .env                              # fill in tokens, keys, creden
 cp app/projects.example.json app/projects.json    # register your projects
 ./scripts/load-keys.sh                            # copy SSH keys into the ssh-keys volume
 docker compose up -d --build
-docker compose exec -it vuln-fix-agent claude     # one-time interactive login
+docker compose exec -it vulnfixer claude     # one-time interactive login
 ```
 
 The login is stored in the `claude-auth` volume. If that volume is wiped, log in again.
@@ -79,11 +79,11 @@ Each key in `app/projects.json` is the name a caller uses. Fields:
 | `base_branch_reason` | no | Why the base is pinned |
 
 `projects.json` is gitignored and bind-mounted into the container, so after editing it you
-only need `docker compose restart vuln-fix-agent`, not a rebuild. To check that every asset
+only need `docker compose restart vulnfixer`, not a rebuild. To check that every asset
 name still resolves:
 
 ```bash
-docker compose exec -u agent vuln-fix-agent vanta-findings --check-registry
+docker compose exec -u agent vulnfixer vanta-findings --check-registry
 ```
 
 ### Compliance tickets
@@ -121,8 +121,8 @@ files the missing tickets without changing the Vanta exception itself.
 ./scripts/VulnFixAgent <project> [...]        # selected projects only
 ./scripts/VulnFixAgent --no-skip              # run even when Vanta reports nothing
 
-docker compose exec -u agent vuln-fix-agent vuln-report   # last 30 days at a glance
-docker compose logs -f vuln-fix-agent
+docker compose exec -u agent vulnfixer vuln-report   # last 30 days at a glance
+docker compose logs -f vulnfixer
 ```
 
 To schedule the nightly batch, install [deploy/crontab](deploy/crontab) with `crontab -e`.

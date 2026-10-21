@@ -51,7 +51,7 @@ kind: added
 
 One short paragraph on what changed and why it matters.
 
-- PR: [#<number>](https://github.com/faizrazadec/vuln-fix-agent/pull/<number>)
+- PR: [#<number>](https://github.com/faizrazadec/vulnfixer/pull/<number>)
 - Docs: [the current doc](../../path/to/doc.md)
 ```
 
