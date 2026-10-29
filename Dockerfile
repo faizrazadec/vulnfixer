@@ -20,7 +20,9 @@ RUN apt-get update \
  && npm install -g "npm@${NPM_VERSION}" "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
  && npm cache clean --force
 
-# gh (PR creation) and docker-ce-cli (rebuilding images to re-scan) from upstream repos,
+# gh (PR creation), docker-ce-cli (rebuilding images to re-scan) and docker-buildx-plugin
+# (BuildKit; without it builds fall back to the classic builder, which leaves an untagged
+# intermediate image per layer that nothing cleans up — ~125GB of them piled up) from upstream repos,
 # so versions track the vendor rather than a pin that rots.
 RUN install -m0755 -d /etc/apt/keyrings \
  && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
@@ -31,7 +33,7 @@ RUN install -m0755 -d /etc/apt/keyrings \
  && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(. /etc/os-release && echo $VERSION_CODENAME) stable" \
       > /etc/apt/sources.list.d/docker.list \
  && apt-get update \
- && apt-get install -y --no-install-recommends gh docker-ce-cli \
+ && apt-get install -y --no-install-recommends gh docker-ce-cli docker-buildx-plugin \
  && rm -rf /var/lib/apt/lists/*
 
 # trivy: vuln scanning for filesystem and built images. The installer is fetched from a

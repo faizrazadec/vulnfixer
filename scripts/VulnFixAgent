@@ -139,7 +139,14 @@ if [ -n "$imgs" ]; then
     docker rmi -f "$i" >/dev/null 2>&1 || true
   done
 fi
-docker image prune -f --filter "dangling=true" --filter "label=stage" >/dev/null 2>&1 || true
+# Untagged leftovers. The old filter also required a "stage" label that verify builds never
+# carry, so it matched nothing and ~990 intermediate images (~125GB) piled up. Dangling-only
+# (no -a): an untagged image is in use by nothing, so this cannot touch another stack's images.
+pruned=$(docker image prune -f 2>/dev/null | sed -n "s/^Total reclaimed space: //p")
+echo "  reap: dangling images reclaimed ${pruned:-0B}"
+# Build cache untouched for a week. Shared with other stacks, but cache is only ever a speed-up.
+cache=$(docker builder prune -f --filter until=168h 2>/dev/null | sed -n "s/^Total:[[:space:]]*//p")
+echo "  reap: build cache >7d reclaimed ${cache:-0B}"
 echo "  reap: $freed clone dir(s) removed"
 REAP
 }
