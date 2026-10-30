@@ -36,6 +36,9 @@ cron ──> scripts/VulnFixAgent ──> scripts/ask.sh ──JSON-RPC──> a
     tracked under
   - `linear-ticket`: creates, links, extends and closes the compliance tickets
   - `slack-notify`: posts to Slack through an incoming webhook
+  - `project-run`: runs a project's own code (installs, tests, builds, servers) with the
+    agent's credentials stripped from its environment. A guard in `main.py` refuses
+    project commands that are not run through it.
   - `vuln-report`: a 30-day rollup of CVEs fixed, PRs opened, cost, and anything that needs
     a look
 - **Repo allowlist**: the agent only works on repos listed in `app/projects.json`.

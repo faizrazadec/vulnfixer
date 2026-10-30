@@ -1,0 +1,103 @@
+#!/usr/bin/env python3
+"""Run a project's own code with none of the agent's secrets in its environment.
+
+    project-run pytest -q
+    project-run --with-package-token pnpm install --frozen-lockfile
+    project-run sh -c 'cd apps/web && pnpm test'
+
+The agent's container carries its credentials as environment variables (Slack, GitHub,
+Vanta, Linear, SSH, A2A). Every project install, test, build, server or `docker run`
+inherits the environment it is started from, and project code reads whatever it finds
+under the names it expects — one repo's test suite found SLACK_WEBHOOK_URL and posted
+test messages to the team channel. This wrapper strips all of those, by name and by
+value (a secret re-exported under another name goes too), then execs the command.
+
+The agent keeps its environment; only the project process is cleaned. The read-only
+GitHub *packages* token is withheld too, unless `--with-package-token` is given: private
+npm installs need it, test runs and servers do not.
+
+`--help` prints this and exits. The server's PreToolUse guard refuses project commands
+that are not run through this wrapper.
+
+Exit code: the command's own; 127 if it cannot be found; 2 on usage error.
+"""
+
+import os
+import sys
+
+# Everything compose.yml hands the agent that is a credential, plus what the entrypoint
+# and Claude Code add. Names, not just prefixes, so a new key is a one-line change here.
+SECRET_NAMES = {
+    "A2A_TOKEN", "GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN",
+    "SSH_AUTH_SOCK", "SSH_AGENT_PID", "SSH_AUTH_KEY", "SSH_SIGN_KEY",
+    "SSH_SIGN_KEY_PRIVATE", "SSH_KEY_PASSPHRASE",
+    "VANTA_CLIENT_ID", "VANTA_CLIENT_SECRET", "VANTA_API_BASE",
+    "LINEAR_API_KEY", "LINEAR_TEAM_ID", "LINEAR_PROJECT_ID", "LINEAR_API_URL",
+    "SLACK_WEBHOOK_URL", "SLACK_BOT_TOKEN", "SLACK_CHANNEL",
+    "ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN",
+    # Agent-internal paths and knobs under generic names a project might also read.
+    "WORKSPACE", "STATE_DIR", "CLAUDE_CONFIG_DIR", "PUBLIC_URL",
+    "LEDGER_NOTIFY_TTL_DAYS", "EXCEPTION_REVIEW_DAYS",
+}
+# Families that are never a project's business here, whatever comes after the prefix.
+SECRET_PREFIXES = ("SLACK_", "LINEAR_", "VANTA_", "SSH_", "A2A_", "ANTHROPIC_",
+                   "CLAUDE_CODE_", "VULNFIXER_")
+PACKAGE_TOKENS = {"GH_READ_PACKAGES_TOKEN", "PACKAGES_READ_TOKEN", "NODE_AUTH_TOKEN"}
+# Values shorter than this are too likely to collide with an ordinary setting ("1", "main").
+MIN_SECRET_LEN = 12
+
+
+def is_secret_name(name):
+    return name in SECRET_NAMES or name.startswith(SECRET_PREFIXES)
+
+
+def clean_env(env, with_package_token=False):
+    """Return (clean env, sorted names removed). Pure: easy to test."""
+    secret_values = {v for k, v in env.items()
+                     if is_secret_name(k) and len(v) >= MIN_SECRET_LEN}
+    if not with_package_token:
+        secret_values |= {v for k, v in env.items()
+                          if k in PACKAGE_TOKENS and len(v) >= MIN_SECRET_LEN}
+    keep, removed = {}, []
+    for k, v in env.items():
+        drop = (is_secret_name(k)
+                or (k in PACKAGE_TOKENS and not with_package_token)
+                or (v in secret_values and not (with_package_token and k in PACKAGE_TOKENS)))
+        if drop:
+            removed.append(k)
+        else:
+            keep[k] = v
+    keep["VULNFIXER_PROJECT_RUN"] = "1"   # lets the guard and a nested call see it was wrapped
+    return keep, sorted(removed)
+
+
+def main():
+    argv = sys.argv[1:]
+    if not argv or argv[0] in ("-h", "--help"):
+        print(__doc__.strip())
+        sys.exit(0 if argv else 2)
+    with_pkg = False
+    while argv and argv[0].startswith("--"):
+        flag = argv.pop(0)
+        if flag == "--with-package-token":
+            with_pkg = True
+        elif flag == "--":
+            break
+        else:
+            print(f"project-run: unknown option {flag} (see --help)", file=sys.stderr)
+            sys.exit(2)
+    if not argv:
+        print("project-run: no command given (see --help)", file=sys.stderr)
+        sys.exit(2)
+    env, removed = clean_env(dict(os.environ), with_pkg)
+    if os.environ.get("PROJECT_RUN_VERBOSE"):
+        print(f"project-run: withheld {', '.join(removed) or 'nothing'}", file=sys.stderr)
+    try:
+        os.execvpe(argv[0], argv, env)
+    except FileNotFoundError:
+        print(f"project-run: command not found: {argv[0]}", file=sys.stderr)
+        sys.exit(127)
+
+
+if __name__ == "__main__":
+    main()
