@@ -11,6 +11,7 @@ import os
 import pathlib
 import re
 import secrets
+import shlex
 import signal
 import subprocess
 import time
@@ -47,6 +48,7 @@ from a2a.utils.constants import (
 from claude_agent_sdk import (
     AssistantMessage,
     ClaudeAgentOptions,
+    HookMatcher,
     ResultMessage,
     TextBlock,
     query,
@@ -419,6 +421,112 @@ _RUNNING: dict[str, asyncio.Task] = {}
 RUN_ENV = "VULN_FIX_RUN"
 
 
+# ---------------------------------------------------------------------------
+# Project-environment guard
+#
+# The agent's environment holds its credentials (Slack, GitHub, Vanta, Linear, SSH). A
+# project's install, test, build or server started from it inherits all of them, and
+# project code reads whatever it finds under the names it expects: one repo's test suite
+# found SLACK_WEBHOOK_URL and posted test messages to the team channel. So every Bash
+# command that runs project code must go through bin/project-run, which strips them.
+# This PreToolUse hook refuses the ones that do not, and tells the agent how to retry.
+# It is a guard rail for an honest agent, not a sandbox: it reads the command text.
+# ---------------------------------------------------------------------------
+_PROJECT_TOOLS = {
+    "pytest", "py.test", "tox", "nox", "pip", "pip3", "poetry", "pipenv", "hatch", "pdm",
+    "npx", "yarn", "bun", "bunx", "node", "deno", "vitest", "jest", "mocha", "playwright",
+    "next", "vite", "turbo", "nx", "make", "cmake", "go", "cargo", "mvn", "gradle",
+    "gradlew", "mvnw", "dotnet", "uvicorn", "gunicorn", "celery", "flask", "alembic",
+    "mise", "just", "task", "rake", "bundle", "composer", "php", "manage.py",
+}
+# Package managers whose read-only subcommands run no project code.
+_READ_ONLY_SUBCOMMANDS = {
+    "npm": {"view", "info", "show", "ls", "list", "outdated", "why", "explain", "config",
+            "--version", "-v", "version", "audit", "ping", "search"},
+    "pnpm": {"view", "info", "ls", "list", "outdated", "why", "--version", "-v", "config",
+             "audit", "licenses"},
+    "uv": {"--version", "version", "export", "tree", "help", "self", "python", "cache"},
+}
+_WRAPPERS = {"nohup", "setsid", "time", "exec", "sudo", "nice", "stdbuf", "env", "command",
+             "timeout", "xargs"}
+_SEGMENT_SPLIT = re.compile(r"&&|\|\||;|\||\n|\$\(|`|\(|\)")
+
+
+def _project_command_violation(command: str) -> str | None:
+    """The first project-code invocation in `command` not wrapped in project-run, or None."""
+    for segment in _SEGMENT_SPLIT.split(command):
+        try:
+            words = shlex.split(segment, posix=True)
+        except ValueError:
+            words = segment.split()
+        i = 0
+        while i < len(words):                       # peel env assignments and wrappers
+            w = words[i]
+            base = os.path.basename(w)
+            if re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", w) or w.startswith("-") and i > 0 \
+                    and os.path.basename(words[i - 1]) in _WRAPPERS:
+                i += 1
+            elif base in _WRAPPERS:
+                i += 1
+                if base == "timeout" and i < len(words) and re.match(r"^[\d.]+[smhd]?$", words[i]):
+                    i += 1
+            else:
+                break
+        if i >= len(words):
+            continue
+        tool, rest = os.path.basename(words[i]), words[i + 1:]
+        if tool == "project-run":
+            continue                                # wrapped: everything after it is clean
+        if tool in ("sh", "bash", "dash", "zsh") and "-c" in rest:
+            inner = rest[rest.index("-c") + 1] if rest.index("-c") + 1 < len(rest) else ""
+            found = _project_command_violation(inner)
+            if found:
+                return found
+            continue
+        sub = next((r for r in rest if not r.startswith("-") or r in ("--version", "-v")), "")
+        if tool == "docker":
+            # Only what builds or starts project code; listing, tagging, removing is fine.
+            if sub in ("build", "run", "compose") or (sub == "buildx" and "build" in rest):
+                return f"docker {sub}"
+            continue
+        if tool in _READ_ONLY_SUBCOMMANDS:
+            if sub in _READ_ONLY_SUBCOMMANDS[tool]:
+                continue
+            return f"{tool} {sub}".strip()
+        if tool in ("python", "python3") or re.match(r"^python3\.\d+$", tool):
+            if "-m" in rest:
+                mod = rest[rest.index("-m") + 1] if rest.index("-m") + 1 < len(rest) else ""
+                if mod.split(".")[0] in {"pytest", "pip", "uvicorn", "gunicorn", "celery",
+                                         "flask", "django", "alembic", "tox", "nox", "unittest",
+                                         "manage", "http"}:
+                    return f"{tool} -m {mod}"
+            script = next((r for r in rest if r.endswith(".py")), "")
+            if script and not script.startswith(("/tmp/", "/app/")):
+                return f"{tool} {script}"
+            continue
+        if tool in _PROJECT_TOOLS or tool.endswith(("gradlew", "mvnw")):
+            return tool
+    return None
+
+
+async def _guard_project_env(input_data, tool_use_id, context):
+    command = (input_data.get("tool_input") or {}).get("command") or ""
+    found = _project_command_violation(command)
+    if not found:
+        return {}
+    return {"hookSpecificOutput": {
+        "hookEventName": "PreToolUse",
+        "permissionDecision": "deny",
+        "permissionDecisionReason": (
+            f"Blocked: `{found}` runs the project's own code with the agent's credentials "
+            "(Slack, GitHub, Vanta, Linear, SSH) in its environment, and project code can "
+            "use them (a test suite once posted to the team Slack channel this way). Run it "
+            "through `project-run`, which strips them: `project-run <command>`, or "
+            "`project-run sh -c '<cd … && command>'` for a compound command. Add "
+            "`--with-package-token` only for an install that needs private npm packages."),
+    }}
+
+
 def _run_pids(task_id: str) -> list[int]:
     """Live processes carrying this run's marker. Zombies have an empty environ, so a
     killed child waiting to be reaped drops out of this list too."""
@@ -552,6 +660,8 @@ class ClaudeCodeExecutor(AgentExecutor):
             max_turns=MAX_TURNS,
             # Inherited by everything the session spawns, so a cancel can find it all.
             env={RUN_ENV: context.task_id},
+            # Project code never sees the agent's credentials: see _guard_project_env.
+            hooks={"PreToolUse": [HookMatcher(matcher="Bash", hooks=[_guard_project_env])]},
             stderr=lambda line: print(f"[claude stderr] {line}", flush=True),
         )
         chunks: list[str] = []
