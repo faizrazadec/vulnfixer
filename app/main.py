@@ -66,6 +66,15 @@ TOKEN = os.environ.get("A2A_TOKEN")
 # suite, several image builds and polling the PR's checks, and stopped before its
 # ticket and Slack steps.
 MAX_TURNS = int(os.environ.get("MAX_TURNS", "400"))
+# The model the agent runs on. Pinned rather than left to the login's default, so an
+# account-side default change cannot silently swap the model under the batch.
+AGENT_MODEL = os.environ.get("AGENT_MODEL", "claude-opus-5-5")
+# Reasoning effort for the agent's session (low | medium | high | xhigh | max) and whether
+# ultracode is on: standing permission to orchestrate multi-agent workflows. Ultracode
+# spends more usage per run and can fan work out across subagents; set AGENT_ULTRACODE=0
+# to turn it off without a code change.
+AGENT_EFFORT = os.environ.get("AGENT_EFFORT", "high")
+AGENT_ULTRACODE = os.environ.get("AGENT_ULTRACODE", "1") not in ("0", "false", "no", "")
 # The pipeline lives in skills/vuln-fix/SKILL.md, which entrypoint.sh installs into
 # $CLAUDE_CONFIG_DIR/skills. Only a pointer goes in the prompt — a bare string here would
 # send --system-prompt and REPLACE Claude Code's own prompt; preset+append adds to it.
@@ -658,6 +667,10 @@ class ClaudeCodeExecutor(AgentExecutor):
             # the ledger in step, the connector would do neither.
             disallowed_tools=["mcp__claude_ai_Slack", "mcp__claude_ai_Linear"],
             max_turns=MAX_TURNS,
+            model=AGENT_MODEL,
+            effort=AGENT_EFFORT,
+            # Session-scoped, so it goes in via --settings rather than the config volume.
+            settings=json.dumps({"ultracode": AGENT_ULTRACODE}),
             # Inherited by everything the session spawns, so a cancel can find it all.
             env={RUN_ENV: context.task_id},
             # Project code never sees the agent's credentials: see _guard_project_env.
