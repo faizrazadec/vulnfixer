@@ -6,7 +6,7 @@ FROM python:3.14-slim
 # deliberately, rebuild, and run tests/test_protocol.py — never as a side effect of an
 # unrelated rebuild. Current as of 2026-09-15.
 ARG NPM_VERSION=12.0.2
-ARG CLAUDE_CODE_VERSION=2.1.267
+ARG CLAUDE_CODE_VERSION=2.1.321
 ARG TRIVY_VERSION=0.74.0
 
 # Node from NodeSource, not Debian: Debian ships Node 18 + npm 9, and npm 9 rewrites
