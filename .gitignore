@@ -1,3 +1,6 @@
+# Machine-specific compose settings (e.g. DNS servers for this host's network)
+compose.override.yml
+
 # Env
 .env
 .env.*

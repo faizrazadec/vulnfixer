@@ -76,6 +76,28 @@ if ! curl -sf -m 10 -o /dev/null "$CARD"; then
   exit 1
 fi
 
+# --- container health -----------------------------------------------------------
+# After a host reboot the container can come up before the network: no working DNS and
+# an empty known_hosts, so every project fails to reach Vanta or clone. Check, and
+# restart it once if broken — by now the network is normally up.
+healthy() {
+  inside sh -c 'getent hosts api.github.com >/dev/null && getent hosts api.vanta.com >/dev/null \
+    && test -s "$HOME/.ssh/known_hosts"' >/dev/null 2>&1
+}
+if ! healthy; then
+  say "container has no DNS or no GitHub host key (started before the network?) — restarting it"
+  docker compose restart "$SVC" >/dev/null 2>&1
+  for _ in $(seq 1 36); do
+    sleep 5
+    curl -sf -m 5 -o /dev/null "$CARD" && healthy && break
+  done
+  if ! healthy; then
+    say "!!! container still has no DNS or GitHub host key after a restart — aborting the batch"
+    exit 1
+  fi
+  say "container healthy after restart"
+fi
+
 # --- Vanta pre-check, with retries -----------------------------------------------
 # Sets FINDINGS, rc and VANTA_ERR (the tool's own stderr, which used to be thrown away,
 # so a failure could not be diagnosed after the fact). Only exit 2 — auth or network —
