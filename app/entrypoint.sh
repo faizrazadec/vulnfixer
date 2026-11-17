@@ -27,8 +27,24 @@ if [ -d "$KEYDIR" ]; then
   chmod 644 "$SSHDIR"/*.pub 2>/dev/null || true
 
   # Pin GitHub's host keys so the first clone doesn't hang on an unknown-host prompt.
-  ssh-keyscan -t rsa,ecdsa,ed25519 github.com > "$SSHDIR/known_hosts" 2>/dev/null || true
+  # After a host reboot this container can start before the network and DNS are up. A
+  # single scan then wrote an empty known_hosts and every git operation failed with
+  # "Host key verification failed" for the life of the container. So wait for DNS (up to
+  # 5 min), then retry the scan until it returns keys (up to 2 min more).
+  n=0
+  until getent hosts github.com >/dev/null 2>&1; do
+    n=$((n + 1)); [ "$n" -ge 60 ] && { echo "[entrypoint] WARNING: github.com still does not resolve after 5 min"; break; }
+    [ "$n" = 1 ] && echo "[entrypoint] waiting for DNS (github.com)..."
+    sleep 5
+  done
+  n=0
+  until ssh-keyscan -t rsa,ecdsa,ed25519 github.com > "$SSHDIR/known_hosts" 2>/dev/null \
+        && [ -s "$SSHDIR/known_hosts" ]; do
+    n=$((n + 1)); [ "$n" -ge 24 ] && { echo "[entrypoint] WARNING: could not fetch GitHub's host keys"; break; }
+    sleep 5
+  done
   chmod 644 "$SSHDIR/known_hosts" 2>/dev/null || true
+  echo "[entrypoint] known_hosts holds $(wc -l < "$SSHDIR/known_hosts" 2>/dev/null || echo 0) GitHub key(s)"
 
 fi
 

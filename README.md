@@ -64,6 +64,10 @@ docker compose up -d --build
 docker compose exec -it vulnfixer claude     # one-time interactive login
 ```
 
+Settings that only make sense on one machine, such as the DNS servers its network
+allows, go in a gitignored `compose.override.yml`, which Docker Compose merges in
+automatically.
+
 The login is stored in the `claude-auth` volume. If that volume is wiped, log in again.
 
 Register the SSH signing key on GitHub twice: once as an **Authentication** key and once as
