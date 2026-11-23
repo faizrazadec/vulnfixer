@@ -761,7 +761,7 @@ class ClaudeCodeExecutor(AgentExecutor):
             )
             return
         print(f"[task {context.task_id}] cancel requested", flush=True)
-        # execute() catches CancelledError and reports TASK_STATE_CANCELLED itself.
+        # execute() catches CancelledError and reports TASK_STATE_CANCELED itself.
         running.cancel()
 
 

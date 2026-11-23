@@ -66,7 +66,7 @@ for m in hist[seen:]:                       # only new progress lines
     print("  " + "".join(p.get("text","") for p in m["parts"])[:400])
 print("__SEEN__", len(hist))
 print("__STATE__", st)
-if st in ("TASK_STATE_COMPLETED", "TASK_STATE_FAILED"):
+if st in ("TASK_STATE_COMPLETED", "TASK_STATE_FAILED", "TASK_STATE_CANCELED", "TASK_STATE_REJECTED"):
     print("\n--- " + st.replace("TASK_STATE_","") + " ---")
     print("".join(p.get("text","") for p in t["status"]["message"]["parts"]))
 ' > /tmp/a2a.$$ 2>/dev/null; then
@@ -89,6 +89,8 @@ if st in ("TASK_STATE_COMPLETED", "TASK_STATE_FAILED"):
   # it as 0 alongside COMPLETED hid every failed run from the batch runner's tally.
   case "$STATE" in
     *COMPLETED) exit 0 ;;
-    *FAILED|*CANCELLED|*REJECTED) exit 2 ;;
+    # a2a-sdk spells it TASK_STATE_CANCELED (one L). Matching only CANCELLED left a poller
+    # spinning on a cancelled task until it gave up, reporting it as lost (exit 1).
+    *FAILED|*CANCELED|*CANCELLED|*REJECTED) exit 2 ;;
   esac
 done
