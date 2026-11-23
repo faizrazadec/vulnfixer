@@ -9,6 +9,7 @@ Run: uv run python tests/test_guard.py
 """
 
 import asyncio
+import tempfile
 import os
 import pathlib
 import subprocess
@@ -90,9 +91,47 @@ def test_project_run_usage():
     print("project-run usage: --help 0, no command 2, unknown option 2, missing command 127")
 
 
+CREDIT = "Co-Authored-" + "By: Claude <noreply@" + "anthropic.com>"
+FOOTER_CC = "Generated with " + "[Claude Code](https://claude.com/claude-code)"
+
+
+def test_attribution_guard_blocks_claude_credit(tmp=pathlib.Path(tempfile.mkdtemp())):
+    body = tmp / "body.md"
+    body.write_text("Fixes 2 CVEs.\n\n🤖 " + FOOTER_CC + "\n")
+    msg = tmp / "msg.txt"
+    msg.write_text("fix: bump x\n\n" + CREDIT + "\n")
+    clean = tmp / "clean.md"
+    clean.write_text("Fixes 2 CVEs.\n\n" + main.PR_FOOTER + "\n")
+    block = [
+        f'git commit -m "fix: bump x" -m "{CREDIT}"',
+        f"git commit -F {msg}",
+        f"git -C repo commit --file={msg}",
+        f"gh pr create --base main --title t --body-file {body}",
+        f"gh pr create --base main --title t -F {body}",
+        f"gh api -X PATCH repos/o/r/pulls/1 -F body=@{body}",
+        f'gh pr create --title t --body "x {FOOTER_CC}"',
+    ]
+    allow = [
+        f"gh pr create --base main --title t --body-file {clean}",
+        f"git commit -F {clean}",
+        "git status",
+        f"cat {body}",                      # reading is not publishing
+        f"grep -c Claude {body}",
+    ]
+    wrong = [c for c in block if not main._attribution_violation(c)]
+    assert not wrong, f"should be blocked: {wrong}"
+    wrong = [c for c in allow if main._attribution_violation(c)]
+    assert not wrong, f"should be allowed: {wrong}"
+    out = asyncio.run(main._guard_attribution({"tool_input": {"command": block[3]}}, "t", None))
+    h = out["hookSpecificOutput"]
+    assert h["permissionDecision"] == "deny" and main.PR_FOOTER in h["permissionDecisionReason"], out
+    print(f"attribution guard: {len(block)} Claude credits blocked, {len(allow)} others allowed")
+
+
 if __name__ == "__main__":
     test_guard_blocks_unwrapped_project_code()
     test_hook_denies_with_a_retry_hint()
+    test_attribution_guard_blocks_claude_credit()
     test_project_run_strips_secrets_by_name_and_value()
     test_project_run_usage()
     print("ok")
