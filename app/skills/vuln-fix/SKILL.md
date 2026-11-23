@@ -88,9 +88,28 @@ create (non-zero exit) is a failure to report, never something to paper over.
    `gh pr list --state open --json number,headRefName,body`.
    - **An open `vuln-fix/*` PR already exists →** adopt ITS branch rather than starting
      fresh: `git checkout <headRefName>`, then bring it current with the base so it is not
-     stale: `git merge --no-edit origin/<base>` (resolve trivially; if a lockfile conflicts,
-     take the base copy and re-run the fix in step 6 so the lock is regenerated cleanly). You
-     will ADD any new fixes to this branch and UPDATE that same PR in step 8.
+     stale: `git merge --no-edit origin/<base>`. You will ADD any new fixes to this branch
+     and UPDATE that same PR in step 8.
+     **Adopting a PR makes you responsible for it being mergeable — resolve every merge
+     conflict, do not report it and move on.** Check `gh pr view <n> --json mergeable,
+     mergeStateStatus`; `CONFLICTING`/`DIRTY` means the merge above will conflict. Resolve
+     by re-applying the PR's intent on top of the current base, not by picking a side
+     blindly:
+     - **Lockfiles** (`uv.lock`, `package-lock.json`, `pnpm-lock.yaml`, `poetry.lock`, …):
+       take the base copy, then re-run the fix in step 6 so the lock is regenerated cleanly.
+     - **Generated or mirrored files** (vendored SDK copies, sync manifests with digests,
+       rules/version counters): take the base copy, re-apply the PR's change through the
+       repo's own tooling or convention (re-run the sync/override script, bump the counter
+       past the base's value, recompute digests), and run the repo's check for them.
+     - **Manifests and code:** keep the base's other changes and re-apply only the version
+       bump or edit the PR exists for.
+     Then re-verify as for a fresh fix: steps 6–7 (tests vs. baseline, image scan), commit the
+     merge signed, and push to the PR branch **without force**. A PR still conflicting after
+     your run is a failed run, not a finding: if after a genuine attempt it truly cannot be
+     resolved (the base rewrote the fixed code beyond recognition), say exactly which files
+     and why in the Slack message, with the `:x:` template in step 8.
+     **Do this even when there are no new findings for the PR** — an adopted PR that still
+     covers open findings must be left mergeable.
    - **No open `vuln-fix/*` PR →** fresh branch:
      `git checkout -b vuln-fix/<base>-<YYYYMMDD-HHMM> origin/<base>`.
 
@@ -432,6 +451,10 @@ create (non-zero exit) is a failure to report, never something to paper over.
      **Then Slack, tagging the owner, with the PR's real final check state** (for an adopted
      PR, "updated PR <url> — added M vulns (now N total)" in place of "opened PR <url> — fixed
      N vulns"; append ` Ticket <url|EMB-123>.` when there is one):
+     **If you resolved merge conflicts on an adopted PR, say so in that same message:**
+     append ` Resolved merge conflicts with \`<base>\` in <files> (<how, in a few words>) and
+     re-verified.` Never send a message that only says the PR "has merge conflicts" or
+     "needs a rebase" — that is work for you to do in step 3, not news for the owner.
      - All checks passed:
        `":white_check_mark: <@owner1> <@owner2 …> <project>: opened PR <url> — fixed N vulns, tests + image + PR checks green. Ready for your review."`
      - Red for a permitted reason:
