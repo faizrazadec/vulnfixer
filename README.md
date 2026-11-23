@@ -68,7 +68,11 @@ Settings that only make sense on one machine, such as the DNS servers its networ
 allows, go in a gitignored `compose.override.yml`, which Docker Compose merges in
 automatically.
 
-The login is stored in the `claude-auth` volume. If that volume is wiped, log in again.
+The login is stored in the `claude-auth` volume, but it expires and cannot renew itself, so
+scheduled runs should not depend on it. For unattended use, run `docker compose exec -it -u
+agent vulnfixer claude setup-token`, put the token it prints in `.env` as
+`CLAUDE_CODE_OAUTH_TOKEN`, and redeploy. The token lasts about a year and takes precedence
+over the login.
 
 Register the SSH signing key on GitHub twice: once as an **Authentication** key and once as
 a **Signing** key. Without the second, commits never show as Verified.

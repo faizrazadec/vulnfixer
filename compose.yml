@@ -13,6 +13,10 @@ services:
     ports: ["127.0.0.1:9999:9999"]
     environment:
       A2A_TOKEN: ${A2A_TOKEN:?set A2A_TOKEN in .env}
+      # Long-lived subscription token from `claude setup-token` (about a year). Claude Code
+      # prefers it over the browser login in the claude-auth volume, which expires and
+      # cannot renew itself unattended. Empty = fall back to that login.
+      CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}
       # Baked into the agent card as the endpoint callers dial. Local-only now, so the
       # host port is the honest answer; set PUBLIC_URL in .env if this is ever exposed.
       PUBLIC_URL: ${PUBLIC_URL:-http://127.0.0.1:9999}
